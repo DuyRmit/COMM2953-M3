@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iterative Writing Workshop</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #ffffff;
+      color: #0f172a;
+    }
+    textarea {
+      resize: vertical;
+    }
+  </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8 min-h-screen">
+
+  <!-- MAIN CONTAINER (1080px max-width centered for Canvas embed) -->
+  <div class="max-w-[1080px] mx-auto space-y-6">
+
+    <!-- HEADER / MODE SWITCHER BAR -->
+    <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+      <div class="flex items-center gap-3">
+        <span id="roleBadge" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+          <i class="fa-solid fa-user-graduate mr-1"></i> Student View
+        </span>
+
+        <!-- REAL-TIME SYNC STATUS -->
+        <span id="syncBadge" class="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-slate-400 inline-block animate-pulse" id="syncDot"></span>
+          <span id="syncStatusText">Connecting sync...</span>
+        </span>
+      </div>
+
+      <button id="toggleTeacherBtn" onclick="toggleRoleModal()" class="text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 bg-white">
+        <i class="fa-solid fa-lock text-[11px]"></i>
+        <span id="toggleRoleText">Teacher Mode</span>
+      </button>
+    </div>
+
+    <!-- TEACHER FACILITATION VIEW -->
+    <div id="teacherWorkspace" class="hidden space-y-4">
+      <div class="bg-amber-50/80 border border-amber-200 rounded-lg p-3.5 flex items-center gap-2 text-xs text-amber-950 font-medium">
+        <i class="fa-solid fa-circle-info text-amber-600 shrink-0"></i>
+        <span><strong>Facilitation Note:</strong> This works best if the sequence of edits is revealed one at a time, rather than letting students read ahead. Revealing a step updates student devices live.</span>
+      </div>
+
+      <!-- FULL WORKSHOP SEQUENCE OVERVIEW (Minimal List matching requested screenshot) -->
+      <div class="border border-slate-200 rounded-lg p-4 bg-white space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+          <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700">Full Workshop Sequence Overview</h3>
+          <span class="text-xs text-slate-500">Click to reveal step to all student devices</span>
+        </div>
+
+        <div class="space-y-2.5 text-xs" id="teacherOverviewList">
+          <!-- Rendered dynamically by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- STUDENT WRITING WORKSPACE -->
+    <div id="studentWorkspace" class="space-y-6">
+      <!-- Rendered dynamically by JS -->
+    </div>
+
+    <!-- GLOBAL ACTION / EXPORT BAR FOR STUDENTS -->
+    <div id="exportBar" class="hidden border-t border-slate-200 pt-4 flex flex-wrap items-center justify-between gap-3">
+      <span class="text-xs text-slate-500">Your edits auto-save locally in your browser.</span>
+      <div class="flex items-center gap-2">
+        <button onclick="copyAllDrafts()" class="text-xs font-medium px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition flex items-center gap-1.5">
+          <i class="fa-solid fa-copy"></i> Copy All Steps
+        </button>
+        <button onclick="downloadDrafts()" class="text-xs font-medium px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md transition flex items-center gap-1.5 shadow-xs">
+          <i class="fa-solid fa-download"></i> Export Summary (.txt)
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PASSCODE MODAL FOR TEACHER MODE -->
+  <div id="passcodeModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-start justify-center p-4 pt-16 sm:pt-24 z-50">
+    <div class="bg-white rounded-xl border border-slate-200 shadow-xl max-w-xs w-full p-5 space-y-4">
+      <div class="space-y-1">
+        <h3 class="font-bold text-sm text-slate-900">Enter Teacher Passcode</h3>
+        <p class="text-xs text-slate-500">Unlock facilitation controls and step reveal.</p>
+      </div>
+      <div>
+        <input type="password" id="passcodeInput" placeholder="Enter passcode" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" onkeydown="if(event.key==='Enter') verifyPasscode()">
+        <p id="passcodeError" class="text-[11px] text-red-600 mt-1 hidden">Incorrect passcode. Try 'teacher123'</p>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button onclick="closePasscodeModal()" class="text-xs px-3 py-1.5 font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+        <button onclick="verifyPasscode()" class="text-xs px-3 py-1.5 font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-lg">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION MESSAGE -->
+  <div id="toast" class="fixed bottom-4 right-4 bg-slate-900 text-white text-xs px-3.5 py-2 rounded-lg shadow-lg opacity-0 transition-opacity duration-200 pointer-events-none z-50 flex items-center gap-2">
+    <i class="fa-solid fa-check text-green-400"></i>
+    <span id="toastMsg">Copied to clipboard</span>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global App Configuration
+    const DEFAULT_PASSCODE = "teacher123";
+
+    // ⚠️ REPLACE with your real Firebase project config (Firebase Console > Project Settings > General > Your apps > SDK setup and configuration)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBXwLMOUlCdOq-WDICDF8EdIUcfATkvdJo",
+      authDomain: "rmit-comm2953.firebaseapp.com",
+      projectId: "rmit-comm2953",
+      storageBucket: "rmit-comm2953.firebasestorage.app",
+      messagingSenderId: "38283469909",
+      appId: "1:38283469909:web:8effc0a40cf3e665b260dc"
+    };
+
+    // Unique room ID for THIS activity — change this per Canvas page/module so different
+    // classes/activities don't accidentally share the same live session document.
+    const ROOM_ID = "COMM2953_Module3_Inclass";
+    
+    // Firestore setup variables
+    let db = null;
+    let auth = null;
+    let roomDocRef = null;
+
+    // Activity Steps Definition
+    const WORKSHOP_STEPS = [
+      {
+        stepNum: 0,
+        badge: "Initial Draft",
+        title: "Write Original Text",
+        instruction: "Write 100 - 150 words about a topic that interests you on your laptop - from crochet techniques to world governance - explaining why it interests you.",
+        placeholder: "Write 100 - 150 words here about any topic that interests you...",
+        targetWords: "100-150 words"
+      },
+      {
+        stepNum: 1,
+        badge: "Edit One",
+        title: "Foreground Personal Care",
+        instruction: "Copy and paste the paragraph beneath the first. Edit/re-write to emphasise the reasons why this topic is important to you.",
+        placeholder: "Re-write to foreground why you personally care about this issue...",
+        targetWords: "100-150 words"
+      },
+      {
+        stepNum: 2,
+        badge: "Edit Two",
+        title: "Amplify Emotional Engagement",
+        instruction: "Edit again to amplify your emotional engagement with the issue. Copy and paste the paragraph to beneath the second.",
+        placeholder: "Edit again to amplify your emotional engagement...",
+        targetWords: "100-150 words"
+      },
+      {
+        stepNum: 3,
+        badge: "Edit Three",
+        title: "Personal Writing Aesthetic",
+        instruction: "Edit/re-write to highlight your own writing aesthetic — the style you prefer for it, e.g. formal, punk, visual metaphors, street, comic, noir, oratorical, etc.   Play with style to show your own attitude and character.",
+        placeholder: "Re-write using your personal aesthetic style (e.g., formal, punk, noir, street, oratorical)...",
+        targetWords: "100-150 words"
+      },
+      {
+        stepNum: 4,
+        badge: "Edit Four",
+        title: "Final Selection & Synthesis",
+        instruction: "Review all the previous edits and combine the parts they preferred from all of them into a final version.",
+        placeholder: "Synthesize the best elements from previous edits into your final version...",
+        targetWords: "100-150 words"
+      },
+      {
+        stepNum: 5,
+        badge: "Reflection",
+        title: "Comparative Analysis",
+        instruction: "Discussion question: What's the difference from the first one? If worse, why? If better, why?",
+        placeholder: "Reflect on differences from your initial draft to final edit...",
+        targetWords: "Open reflection"
+      }
+    ];
+
+    // Local State
+    window.state = {
+      role: 'student',
+      revealedStep: 0,
+      drafts: { 0: "", 1: "", 2: "", 3: "", 4: "", 5: "" },
+      // Tracks steps the student has manually expanded/collapsed by hand, overriding
+      // the default auto-collapse-previous-steps behavior. { [stepNum]: true|false }
+      manualOverride: {}
+    };
+
+    // Default rule: only the currently active (latest revealed) step is expanded;
+    // earlier steps auto-collapse to keep the page short. A manual click always wins.
+    function isStepExpanded(stepNum) {
+      if (window.state.manualOverride.hasOwnProperty(stepNum)) {
+        return window.state.manualOverride[stepNum];
+      }
+      return stepNum === window.state.revealedStep;
+    }
+
+    window.toggleStepCollapse = function(stepNum) {
+      window.state.manualOverride[stepNum] = !isStepExpanded(stepNum);
+      applyStepCollapseUI(stepNum);
+    };
+
+    // Show/hide only the card body (instruction + textarea) — never touches or
+    // recreates the <textarea>, so in-progress typing/focus is never lost.
+    function applyStepCollapseUI(stepNum) {
+      const body = document.getElementById(`stepBody-${stepNum}`);
+      const chevron = document.getElementById(`stepChevron-${stepNum}`);
+      if (!body) return;
+      const expanded = isStepExpanded(stepNum);
+      body.classList.toggle('hidden', !expanded);
+      if (chevron) chevron.classList.toggle('rotate-180', expanded);
+    }
+
+    async function initCloudSync() {
+      const syncBadge = document.getElementById('syncBadge');
+      const syncDot = document.getElementById('syncDot');
+      const syncStatusText = document.getElementById('syncStatusText');
+
+      if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        try {
+          const app = initializeApp(firebaseConfig);
+          auth = getAuth(app);
+          db = getFirestore(app);
+
+          // Authenticate anonymously (every visitor — teacher or student — gets an anon UID)
+          await signInAnonymously(auth);
+
+          // Reference to the shared session document for this specific activity
+          roomDocRef = doc(db, 'workshop_sessions', ROOM_ID);
+
+          // Listen for step updates from teacher device
+          onSnapshot(roomDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (typeof data.revealedStep === 'number' && data.revealedStep !== window.state.revealedStep) {
+                window.state.revealedStep = data.revealedStep;
+                saveLocalState();
+                render();
+                if (window.state.role === 'student') {
+                  showToast(`Step ${data.revealedStep + 1} revealed by teacher`);
+                }
+              }
+            } else {
+              // Initialize room document if missing
+              setDoc(roomDocRef, { revealedStep: 0, updatedAt: Date.now() }, { merge: true });
+            }
+
+            // Update Sync Status Badge
+            syncDot.className = "w-2 h-2 rounded-full bg-emerald-500 inline-block";
+            syncStatusText.textContent = "Live Class Connected";
+            syncBadge.className = "text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5";
+          }, (error) => {
+            console.warn("Real-time sync listener error:", error);
+            syncStatusText.textContent = "Offline Mode";
+            syncDot.className = "w-2 h-2 rounded-full bg-amber-500 inline-block";
+          });
+
+        } catch (e) {
+          console.warn("Cloud Sync initialization skipped:", e);
+          syncStatusText.textContent = "Local Session";
+          syncDot.className = "w-2 h-2 rounded-full bg-slate-400 inline-block";
+        }
+      } else {
+        syncStatusText.textContent = "Local Session";
+        syncDot.className = "w-2 h-2 rounded-full bg-slate-400 inline-block";
+      }
+    }
+
+    function loadLocalState() {
+      const savedState = localStorage.getItem('iterative_workshop_state');
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          window.state.revealedStep = parsed.revealedStep ?? 0;
+          window.state.drafts = { ...window.state.drafts, ...parsed.drafts };
+        } catch (e) {
+          console.warn("Failed to parse local state", e);
+        }
+      }
+    }
+
+    function saveLocalState() {
+      localStorage.setItem('iterative_workshop_state', JSON.stringify({
+        revealedStep: window.state.revealedStep,
+        drafts: window.state.drafts
+      }));
+    }
+
+    function countWords(str) {
+      if (!str) return 0;
+      const cleanStr = str.trim();
+      return cleanStr ? cleanStr.split(/\s+/).length : 0;
+    }
+
+    window.jumpToStep = async function(stepIndex) {
+      const isHiding = stepIndex < window.state.revealedStep;
+      window.state.revealedStep = stepIndex;
+      saveLocalState();
+      render();
+
+      // Broadcast new step to all connected student devices
+      if (db && roomDocRef) {
+        try {
+          await setDoc(roomDocRef, { revealedStep: stepIndex, updatedAt: Date.now() }, { merge: true });
+        } catch (err) {
+          console.warn("Failed to broadcast step to students:", err);
+        }
+      }
+      
+      if (isHiding) {
+        showToast(`Step hidden for all student devices`);
+      } else {
+        showToast(`Step ${stepIndex + 1} revealed to all student devices`);
+      }
+    };
+
+    window.toggleRoleModal = function() {
+      if (window.state.role === 'teacher') {
+        window.switchRole('student');
+      } else {
+        document.getElementById('passcodeError').classList.add('hidden');
+        document.getElementById('passcodeInput').value = '';
+        // Scroll to top first. The modal is top-aligned (not centered) because in Canvas
+        // the iframe height matches page content, so a vertically-centered fixed modal
+        // would land in the middle of a potentially very long page.
+        try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (e) {}
+        document.getElementById('passcodeModal').classList.remove('hidden');
+        setTimeout(() => document.getElementById('passcodeInput').focus(), 50);
+      }
+    };
+
+    window.closePasscodeModal = function() {
+      document.getElementById('passcodeModal').classList.add('hidden');
+    };
+
+    window.verifyPasscode = function() {
+      const val = document.getElementById('passcodeInput').value;
+      if (val === DEFAULT_PASSCODE) {
+        window.closePasscodeModal();
+        window.switchRole('teacher');
+      } else {
+        document.getElementById('passcodeError').classList.remove('hidden');
+      }
+    };
+
+    window.switchRole = function(newRole) {
+      window.state.role = newRole;
+      render();
+    };
+
+    window.updateDraft = function(stepNum, val) {
+      window.state.drafts[stepNum] = val;
+      saveLocalState();
+      
+      const countEl = document.getElementById(`wordCount-${stepNum}`);
+      if (countEl) {
+        countEl.textContent = `${countWords(val)} words`;
+      }
+
+      const hasContent = Object.values(window.state.drafts).some(d => d.trim().length > 0);
+      document.getElementById('exportBar').classList.toggle('hidden', !hasContent || window.state.role === 'teacher');
+    };
+
+    window.copyPreviousText = function(currentStepNum) {
+      const prevText = window.state.drafts[currentStepNum - 1] || "";
+      if (!prevText.trim()) {
+        showToast("Previous edit is empty");
+        return;
+      }
+      window.state.drafts[currentStepNum] = prevText;
+      saveLocalState();
+      render();
+      showToast("Previous text copied down");
+    };
+
+    function render() {
+      const roleBadge = document.getElementById('roleBadge');
+      const toggleRoleText = document.getElementById('toggleRoleText');
+      const teacherWorkspace = document.getElementById('teacherWorkspace');
+      const studentWorkspace = document.getElementById('studentWorkspace');
+
+      if (window.state.role === 'teacher') {
+        roleBadge.className = "text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300";
+        roleBadge.innerHTML = `<i class="fa-solid fa-chalkboard-user mr-1"></i> Teacher Mode`;
+        toggleRoleText.textContent = "Exit Teacher Mode";
+        teacherWorkspace.classList.remove('hidden');
+        studentWorkspace.classList.add('hidden');
+        renderTeacherWorkspace();
+      } else {
+        roleBadge.className = "text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200";
+        roleBadge.innerHTML = `<i class="fa-solid fa-user-graduate mr-1"></i> Student View`;
+        toggleRoleText.textContent = "Teacher Mode";
+        teacherWorkspace.classList.add('hidden');
+        studentWorkspace.classList.remove('hidden');
+        renderStudentWorkspace();
+      }
+
+      const hasContent = Object.values(window.state.drafts).some(d => d.trim().length > 0);
+      document.getElementById('exportBar').classList.toggle('hidden', !hasContent || window.state.role === 'teacher');
+    }
+
+    function renderTeacherWorkspace() {
+      const overview = document.getElementById('teacherOverviewList');
+      overview.innerHTML = '';
+      
+      WORKSHOP_STEPS.forEach((s) => {
+        const isCurrent = s.stepNum === window.state.revealedStep;
+        const isPast = s.stepNum < window.state.revealedStep;
+
+        const div = document.createElement('div');
+        div.className = `p-3.5 rounded-lg border transition flex items-center justify-between gap-4 ${
+          isCurrent 
+            ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300/50' 
+            : isPast
+              ? 'bg-emerald-50/60 border-emerald-200'
+              : 'bg-white border-slate-200 hover:border-slate-300'
+        }`;
+
+        let statusBadge = '';
+        if (isCurrent) {
+          statusBadge = '<span class="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider">Active Step</span>';
+        } else if (isPast) {
+          statusBadge = '<span class="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1"><i class="fa-solid fa-check text-emerald-600"></i> Revealed</span>';
+        }
+
+        let actionBtn = '';
+        if (isCurrent) {
+          if (s.stepNum > 0) {
+            actionBtn = `
+              <button onclick="jumpToStep(${s.stepNum - 1})" class="text-xs px-3 py-1.5 font-semibold rounded transition bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                <i class="fa-solid fa-eye-slash text-[11px]"></i> Hide Step
+              </button>
+            `;
+          } else {
+            actionBtn = `
+              <span class="text-xs font-semibold text-amber-900 bg-amber-100/90 px-3 py-1.5 rounded border border-amber-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-eye text-[11px]"></i> Active Step
+              </span>
+            `;
+          }
+        } else if (isPast) {
+          actionBtn = `
+            <button onclick="jumpToStep(${s.stepNum})" class="text-xs px-3 py-1.5 font-semibold rounded transition bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+              Set Active
+            </button>
+          `;
+        } else {
+          actionBtn = `
+            <button onclick="jumpToStep(${s.stepNum})" class="text-xs px-3 py-1.5 font-semibold rounded transition bg-slate-900 hover:bg-slate-800 text-white shadow-2xs flex items-center gap-1">
+              <i class="fa-solid fa-eye text-[10px]"></i> Reveal Step
+            </button>
+          `;
+        }
+
+        div.innerHTML = `
+          <div class="space-y-1 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs ${isPast ? 'text-emerald-950' : 'text-slate-900'}">${s.badge}: ${s.title}</span>
+              ${statusBadge}
+            </div>
+            <p class="text-xs ${isPast ? 'text-emerald-900/80' : 'text-slate-600'} leading-relaxed">${s.instruction}</p>
+          </div>
+
+          <div class="shrink-0">
+            ${actionBtn}
+          </div>
+        `;
+
+        overview.appendChild(div);
+      });
+    }
+
+    function renderStudentWorkspace() {
+      const workspace = document.getElementById('studentWorkspace');
+
+      // Find cards already in the DOM (tagged with data-step) so we don't rebuild them.
+      // Rebuilding a card that's already showing would destroy its <textarea>, wiping
+      // whatever the student is mid-typing and stealing focus — that's the bug we're fixing.
+      const existingCards = Array.from(workspace.querySelectorAll('[data-step]'));
+      const existingSteps = new Set(existingCards.map(el => parseInt(el.dataset.step, 10)));
+
+      // Remove cards for steps that got hidden again (teacher clicked "Hide Step")
+      existingCards.forEach(card => {
+        const stepNum = parseInt(card.dataset.step, 10);
+        if (stepNum > window.state.revealedStep) {
+          card.remove();
+        }
+      });
+
+      // Append only the steps that are newly revealed and not already on screen.
+      for (let i = 0; i <= window.state.revealedStep; i++) {
+        if (existingSteps.has(i)) continue;
+
+        const step = WORKSHOP_STEPS[i];
+        const val = window.state.drafts[i] || "";
+        const wCount = countWords(val);
+
+        const card = document.createElement('div');
+        card.dataset.step = i;
+        card.className = "border border-slate-200 rounded-xl p-5 bg-white space-y-3 transition shadow-2xs";
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5 cursor-pointer select-none" onclick="toggleStepCollapse(${step.stepNum})">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">${step.badge}</span>
+              <h3 class="font-bold text-sm text-slate-900">${step.title}</h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="wordCount-${step.stepNum}" class="text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-full">
+                ${wCount} words
+              </span>
+              <button type="button" aria-label="Toggle step" class="text-slate-400 hover:text-slate-700 p-1 -m-1">
+                <i id="stepChevron-${step.stepNum}" class="fa-solid fa-chevron-down text-[11px] transition-transform"></i>
+              </button>
+            </div>
+          </div>
+
+          <div id="stepBody-${step.stepNum}" class="space-y-3">
+            <p class="text-xs text-slate-700 leading-relaxed font-medium bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+              ${step.instruction}
+            </p>
+
+            ${i > 0 && i <= 4 ? `
+              <div class="flex justify-end">
+                <button onclick="copyPreviousText(${i})" class="text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded transition flex items-center gap-1">
+                  <i class="fa-solid fa-paste text-[10px]"></i> Copy Previous Edit Text
+                </button>
+              </div>
+            ` : ''}
+
+            <div>
+              <textarea 
+                rows="${i === 5 ? '3' : '5'}" 
+                placeholder="${step.placeholder}"
+                oninput="updateDraft(${step.stepNum}, this.value)"
+                class="w-full text-xs sm:text-sm p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent leading-relaxed"
+              >${val}</textarea>
+            </div>
+          </div>
+        `;
+
+        workspace.appendChild(card);
+      }
+
+      // Re-apply collapse/expand state for every visible step on each render pass.
+      // Cheap (class toggles only) and safe — never touches textarea nodes — so it can
+      // run every time revealedStep changes without wiping in-progress typing.
+      for (let i = 0; i <= window.state.revealedStep; i++) {
+        applyStepCollapseUI(i);
+      }
+    }
+
+    window.copyAllDrafts = function() {
+      let output = "ITERATIVE WRITING WORKSHOP SUBMISSION\n";
+      output += "========================================\n\n";
+
+      for (let i = 0; i <= window.state.revealedStep; i++) {
+        const step = WORKSHOP_STEPS[i];
+        output += `--- ${step.badge.toUpperCase()}: ${step.title.toUpperCase()} ---\n`;
+        output += `Instruction: ${step.instruction}\n`;
+        output += `Word Count: ${countWords(window.state.drafts[i] || "")} words\n\n`;
+        output += `${window.state.drafts[i] || "(No text entered)"}\n\n`;
+      }
+
+      const tempTextArea = document.createElement("textarea");
+      tempTextArea.value = output;
+      document.body.appendChild(tempTextArea);
+      tempTextArea.select();
+      try {
+        document.execCommand('copy');
+        showToast("All edits copied to clipboard");
+      } catch (err) {
+        showToast("Failed to copy text");
+      }
+      document.body.removeChild(tempTextArea);
+    };
+
+    window.downloadDrafts = function() {
+      let output = "ITERATIVE WRITING WORKSHOP SUBMISSION\n";
+      output += "========================================\n\n";
+
+      for (let i = 0; i <= window.state.revealedStep; i++) {
+        const step = WORKSHOP_STEPS[i];
+        output += `--- ${step.badge.toUpperCase()}: ${step.title.toUpperCase()} ---\n`;
+        output += `Word Count: ${countWords(window.state.drafts[i] || "")} words\n\n`;
+        output += `${window.state.drafts[i] || "(No text entered)"}\n\n`;
+      }
+
+      const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'iterative_writing_workshop.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Summary file downloaded");
+    };
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+      }, 2500);
+    }
+
+    // App Startup
+    window.addEventListener('load', () => {
+      loadLocalState();
+      render();
+      initCloudSync();
+    });
+  </script>
+</body>
+</html>
